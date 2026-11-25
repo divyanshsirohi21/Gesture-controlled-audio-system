@@ -1,0 +1,164 @@
+#include <Wire.h>
+#include <SparkFun_APDS9960.h>
+#include <BleKeyboard.h>
+
+// Bluetooth controller
+BleKeyboard bleKeyboard("Gesture Audio");
+
+// APDS-9960 sensor
+SparkFun_APDS9960 apds = SparkFun_APDS9960();
+
+// ESP32 I2C pins
+#define SDA_PIN 21
+#define SCL_PIN 22
+
+// Gesture cooldown
+unsigned long lastCommandTime = 0;
+const unsigned long commandCooldown = 800;
+
+// Bluetooth media command function
+void sendMediaCommand(const MediaKeyReport key,
+                      const char* action) {
+
+  if (bleKeyboard.isConnected()) {
+
+    // Send the complete media key report
+    bleKeyboard.write(key);
+
+    Serial.print("ACTION: ");
+    Serial.println(action);
+
+  } else {
+    Serial.println("Phone not connected!");
+  }
+}
+
+void setup() {
+
+  Serial.begin(115200);
+  delay(500);
+
+  Serial.println();
+  Serial.println("GESTURE CONTROLLED AUDIO SYSTEM");
+
+  // Initialize I2C
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  // Initialize APDS-9960
+  if (apds.init()) {
+    Serial.println("APDS-9960 initialized successfully!");
+  } else {
+    Serial.println("APDS-9960 initialization failed!");
+    while (true) {
+      delay(100);
+    }
+  }
+
+  // Enable gesture sensor
+  if (apds.enableGestureSensor(true)) {
+    Serial.println("Gesture sensor enabled!");
+  } else {
+    Serial.println("Gesture sensor enable failed!");
+    while (true) {
+      delay(100);
+    }
+  }
+
+  // Start Bluetooth
+  Serial.println("Starting Bluetooth...");
+  bleKeyboard.begin();
+
+  Serial.println("System ready!");
+  Serial.println("Pair phone with: Gesture Audio");
+}
+
+void loop() {
+
+  if (apds.isGestureAvailable()) {
+
+    uint8_t gesture = apds.readGesture();
+
+    if (gesture == DIR_NONE) {
+      return;
+    }
+
+    // Prevent repeated commands
+    if (millis() - lastCommandTime < commandCooldown) {
+      return;
+    }
+
+    switch (gesture) {
+
+      case DIR_LEFT:
+
+        Serial.println("LEFT - Previous Song");
+
+        sendMediaCommand(
+          KEY_MEDIA_PREVIOUS_TRACK,
+          "PREVIOUS SONG"
+        );
+
+        break;
+
+      case DIR_RIGHT:
+
+        Serial.println("RIGHT - Next Song");
+
+        sendMediaCommand(
+          KEY_MEDIA_NEXT_TRACK,
+          "NEXT SONG"
+        );
+
+        break;
+
+      case DIR_UP:
+
+        Serial.println("UP - Volume Up");
+
+        sendMediaCommand(
+          KEY_MEDIA_VOLUME_UP,
+          "VOLUME UP"
+        );
+
+        break;
+
+      case DIR_DOWN:
+
+        Serial.println("DOWN - Volume Down");
+
+        sendMediaCommand(
+          KEY_MEDIA_VOLUME_DOWN,
+          "VOLUME DOWN"
+        );
+
+        break;
+
+      case DIR_NEAR:
+
+        Serial.println("NEAR - Play/Pause");
+
+        sendMediaCommand(
+          KEY_MEDIA_PLAY_PAUSE,
+          "PLAY / PAUSE"
+        );
+
+        break;
+
+      case DIR_FAR:
+
+        Serial.println("FAR - No action");
+
+        break;
+
+      default:
+
+        Serial.println("Unknown gesture");
+
+        break;
+    }
+
+    lastCommandTime = millis();
+  }
+
+  delay(10);
+}
